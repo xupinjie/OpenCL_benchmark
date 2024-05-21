@@ -1,0 +1,3 @@
+[submodule "deps/ppl.common"]
+	path = deps/ppl.common
+	url = https://github.com/xupinjie/ppl.common.git
