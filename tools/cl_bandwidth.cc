@@ -22,7 +22,8 @@
 #define LOOP_KERNEL_SYN(cmd)                                 \
     {                                                        \
         for (int i = 0; i < warms; i++) {                    \
-            cmd ret = clFinish(frame_chain->getQueue());     \
+            cmd;                                             \
+            ret = clFinish(frame_chain->getQueue());         \
         }                                                    \
         for (int i = 0; i < loops; i++) {                    \
             cmd ret = clFinish(frame_chain->getQueue());     \
@@ -41,10 +42,10 @@
 #define LOOP_KERNEL_NON_SYN(cmd)                             \
     {                                                        \
         for (int i = 0; i < warms; i++) {                    \
-            cmd                                              \
+            cmd;                                             \
         }                                                    \
         for (int i = 0; i < loops; i++) {                    \
-            cmd CHECK_ERROR("clFinish failed", ret);         \
+            cmd;                                             \
             uint64_t time_ns = frame_chain->getKernelTime(); \
             if (time_ns == UINT64_MAX) {                     \
                 LOG(ERROR) << "run kernel failed";           \
@@ -152,6 +153,7 @@ static void benchmark_stream_copy_buffer(ppl::common::ocl::FrameChain* frame_cha
     options += (" -DT=" + dtype_options);
     options += (" -DREAD_TIMES=" + std::to_string(READ_TIMES));
     options += (" -DWRITE_TIMES=" + std::to_string(WRITE_TIMES));
+    options += (" -DOUT_LOOPS=" + std::to_string(1));
     cl_kernel kernel;
 
     frame_chain->setCompileOptions(options.c_str());
@@ -176,6 +178,62 @@ static void benchmark_stream_copy_buffer(ppl::common::ocl::FrameChain* frame_cha
     else
         printf("stream copy[r%d,w%d] buffer bandwidth: %zuKB %s. max:%f GB/s, ave: %f\n", READ_TIMES, WRITE_TIMES,
                bytesKB, dtype_options.c_str(), max_bandwidth, ave_bandwidth);
+}
+
+static void benchmark_stream_copy_buffer_1block(ppl::common::ocl::FrameChain* frame_chain, std::string dtype_options,
+                                                size_t buffer_bytes = 0) {
+    cl_int ret = 0;
+    ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
+    size_t max_mem_alloc_size = device->getMaxMemAllocSize();
+
+    int outloops = 100;
+
+    if (buffer_bytes == 0)
+        buffer_bytes = max_mem_alloc_size;
+    size_t elems = buffer_bytes / get_elem_size(dtype_options);
+
+    size_t read_bytes, write_bytes;
+    read_bytes = buffer_bytes;
+    write_bytes = 0;
+
+    cl_mem read_buffer = clCreateBuffer(frame_chain->getContext(), CL_MEM_READ_ONLY, buffer_bytes, NULL, &ret);
+    CHECK_ERROR("clCreateBuffer failed", ret);
+    cl_mem write_buffer = clCreateBuffer(frame_chain->getContext(), CL_MEM_WRITE_ONLY, buffer_bytes, NULL, &ret);
+    CHECK_ERROR("clCreateBuffer failed", ret);
+    ppl::common::Destructor __guard([&read_buffer, &write_buffer]() -> void {
+        if (read_buffer)
+            clReleaseMemObject(read_buffer);
+        if (write_buffer)
+            clReleaseMemObject(write_buffer);
+    });
+
+    std::string options = "-cl-std=CL2.0 -cl-mad-enable -cl-fast-relaxed-math";
+    options += (" -DT=" + dtype_options);
+    options += (" -DREAD_TIMES=" + std::to_string(1));
+    options += (" -DWRITE_TIMES=" + std::to_string(0));
+    options += (" -DOUT_LOOPS=" + std::to_string(outloops));
+    cl_kernel kernel;
+
+    frame_chain->setCompileOptions(options.c_str());
+    SET_PROGRAM_SOURCE(frame_chain, benchmark_bandwidth_buffer);
+
+    size_t ls[] = {1024, 1, 1};
+    size_t gs[] = {1024, 1, 1};
+
+    uint64_t ave_time_us = 0;
+    uint64_t min_time_us = UINT64_MAX;
+    const int loops = 10;
+    const int warms = 5;
+
+    LOOP_KERNEL_NON_SYN(
+        runOclKernel(frame_chain, "bandwidth_copy_buffer_1block", 1, gs, ls, elems, read_buffer, write_buffer););
+
+    double ave_bandwidth = outloops * (read_bytes + write_bytes) * 1.0 / (ave_time_us * 1e-06) / 1024 / 1024 / 1024;
+    double max_bandwidth = outloops * (read_bytes + write_bytes) * 1.0 / (min_time_us * 1e-06) / 1024 / 1024 / 1024;
+    size_t bytesMB = (read_bytes + write_bytes) / 1024 / 1024;
+    size_t bytesKB = (read_bytes + write_bytes) / 1024;
+    printf("stream copy buffer bandwidth: %zuKB loops:%d %s. max:%f GB/s, ave: %f\n", bytesKB, outloops,
+           dtype_options.c_str(), max_bandwidth, ave_bandwidth);
 }
 
 /**
@@ -220,7 +278,20 @@ static void BandtwidhTest_datasize(ppl::common::ocl::FrameChain* frame_chain) {
     size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
     // for (size_t buffer_size = 1024; buffer_size <= max_size; buffer_size*=2) {
     for (size_t buffer_size = max_size; buffer_size >= 1024; buffer_size /= 2) {
-        benchmark_stream_copy_buffer(frame_chain, "int", 4, 0, buffer_size);
+        benchmark_stream_copy_buffer(frame_chain, "half8", 1, 0, buffer_size);
+    }
+}
+
+/**
+ * @brief 测试多层存储的大小, TODO: 正确性有待验证
+ */
+static void BandtwidhTest_cachesize(ppl::common::ocl::FrameChain* frame_chain) {
+    size_t stride = 4096;
+    size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
+    // for (size_t buffer_size = 4096; buffer_size < max_size; buffer_size += stride) {
+    for (size_t buffer_size = 4096; buffer_size < max_size; buffer_size *= 2) {
+        // benchmark_stream_copy_buffer(frame_chain, "int", 1, 0, buffer_size);
+        benchmark_stream_copy_buffer_1block(frame_chain, "int", buffer_size);
     }
 }
 
@@ -233,7 +304,8 @@ int main() {
     // BandtwidhTest_demo(frame_chain);
     // BandtwidhTest_writem_readn(frame_chain);
     // BandtwidhTest_datatype(frame_chain);
-    BandtwidhTest_datasize(frame_chain);
+    // BandtwidhTest_datasize(frame_chain);
+    BandtwidhTest_cachesize(frame_chain);
 
     ppl::common::ocl::removeAllKernelsFromPool();
 

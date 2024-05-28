@@ -15,10 +15,23 @@ __kernel void bandwidth_copy_buffer(long len, __global T* src, __global T* dst) 
         res += src[ridx + i * blocksize];
     }
 
-#if WRITE_TIMES==0
+#if WRITE_TIMES == 0
     if (((float*)&res)[0] == 3.1415926535)
 #endif
-    dst[widx] = res;
+        dst[widx] = res;
+}
+
+__kernel void bandwidth_copy_buffer_1block(long len, __global T* src, __global T* dst) {
+    int gidx = get_global_id(0);
+    int blocksize = get_local_size(0);
+
+    for (int lp = 0; lp < OUT_LOOPS; lp++) {
+        for (int idx = gidx; idx < len; idx += blocksize) {
+            T data = src[idx];
+            if (((float*)&data)[0] == 3.1415926535)
+                dst[idx] = data;
+        }
+    }
 }
 
 // __kernel void bandwidth_reducesum_buffer(
