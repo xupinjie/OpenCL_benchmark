@@ -21,17 +21,33 @@ __kernel void bandwidth_copy_buffer(long len, __global T* src, __global T* dst) 
         dst[widx] = res;
 }
 
-__kernel void bandwidth_copy_buffer_1block(long len, __global T* src, __global T* dst) {
+__kernel void bandwidth_copy_buffer_nblock(long len, __global T* src, __global T* dst) {
     int gidx = get_global_id(0);
+    int tidx = get_local_id(0);
     int blocksize = get_local_size(0);
+    int bidx = get_group_id(0);
+
+    if (tidx > len)
+        return;
 
     for (int lp = 0; lp < OUT_LOOPS; lp++) {
-        for (int idx = gidx; idx < len; idx += blocksize) {
+        for (int idx = tidx; idx < len; idx += blocksize) {
             T data = src[idx];
             if (((float*)&data)[0] == 3.1415926535)
-                dst[idx] = data;
+                dst[gidx] = data;
         }
     }
+
+    // int base_idx = bidx * (len / get_num_groups(0));
+    // T* src_l = src + base_idx;
+
+    // for (int lp = 0; lp < OUT_LOOPS; lp++) {
+    //     for (int idx = tidx; idx < len; idx += blocksize) {
+    //         T data = src_l[idx];
+    //         if (((float*)&data)[0] == 3.1415926535)
+    //             dst[idx] = data;
+    //     }
+    // }
 }
 
 // __kernel void bandwidth_reducesum_buffer(

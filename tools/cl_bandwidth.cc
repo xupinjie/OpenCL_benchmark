@@ -180,13 +180,13 @@ static void benchmark_stream_copy_buffer(ppl::common::ocl::FrameChain* frame_cha
                bytesKB, dtype_options.c_str(), max_bandwidth, ave_bandwidth);
 }
 
-static void benchmark_stream_copy_buffer_1block(ppl::common::ocl::FrameChain* frame_chain, std::string dtype_options,
-                                                size_t buffer_bytes = 0) {
+static void benchmark_stream_copy_buffer_nblock(ppl::common::ocl::FrameChain* frame_chain, std::string dtype_options,
+                                                size_t buffer_bytes = 0, size_t blocknum = 1) {
     cl_int ret = 0;
     ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
     size_t max_mem_alloc_size = device->getMaxMemAllocSize();
 
-    int outloops = 100;
+    int outloops = 64;
 
     if (buffer_bytes == 0)
         buffer_bytes = max_mem_alloc_size;
@@ -217,8 +217,9 @@ static void benchmark_stream_copy_buffer_1block(ppl::common::ocl::FrameChain* fr
     frame_chain->setCompileOptions(options.c_str());
     SET_PROGRAM_SOURCE(frame_chain, benchmark_bandwidth_buffer);
 
-    size_t ls[] = {1024, 1, 1};
-    size_t gs[] = {1024, 1, 1};
+    size_t blocksize = 512;
+    size_t ls[] = {blocksize, 1, 1};
+    size_t gs[] = {blocksize * blocknum, 1, 1};
 
     uint64_t ave_time_us = 0;
     uint64_t min_time_us = UINT64_MAX;
@@ -226,14 +227,16 @@ static void benchmark_stream_copy_buffer_1block(ppl::common::ocl::FrameChain* fr
     const int warms = 5;
 
     LOOP_KERNEL_NON_SYN(
-        runOclKernel(frame_chain, "bandwidth_copy_buffer_1block", 1, gs, ls, elems, read_buffer, write_buffer););
+        runOclKernel(frame_chain, "bandwidth_copy_buffer_nblock", 1, gs, ls, elems, read_buffer, write_buffer););
 
-    double ave_bandwidth = outloops * (read_bytes + write_bytes) * 1.0 / (ave_time_us * 1e-06) / 1024 / 1024 / 1024;
-    double max_bandwidth = outloops * (read_bytes + write_bytes) * 1.0 / (min_time_us * 1e-06) / 1024 / 1024 / 1024;
+    double ave_bandwidth =
+        blocknum * outloops * (read_bytes + write_bytes) * 1.0 / (ave_time_us * 1e-06) / 1024 / 1024 / 1024;
+    double max_bandwidth =
+        blocknum * outloops * (read_bytes + write_bytes) * 1.0 / (min_time_us * 1e-06) / 1024 / 1024 / 1024;
     size_t bytesMB = (read_bytes + write_bytes) / 1024 / 1024;
     size_t bytesKB = (read_bytes + write_bytes) / 1024;
-    printf("stream copy buffer bandwidth: %zuKB loops:%d %s. max:%f GB/s, ave: %f\n", bytesKB, outloops,
-           dtype_options.c_str(), max_bandwidth, ave_bandwidth);
+    printf("stream copy buffer bandwidth: %zuKB loops:%d blocknum:%d %s. max:%f GB/s, ave: %f\n", bytesKB, outloops,
+           blocknum, dtype_options.c_str(), max_bandwidth, ave_bandwidth);
 }
 
 /**
@@ -283,15 +286,16 @@ static void BandtwidhTest_datasize(ppl::common::ocl::FrameChain* frame_chain) {
 }
 
 /**
- * @brief 测试多层存储的大小, TODO: 正确性有待验证
+ * @brief 测试多层存储的大小和带宽
  */
 static void BandtwidhTest_cachesize(ppl::common::ocl::FrameChain* frame_chain) {
     size_t stride = 4096;
-    size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
+    // size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
+    size_t max_size = 32 * 1024 * 1024;
     // for (size_t buffer_size = 4096; buffer_size < max_size; buffer_size += stride) {
     for (size_t buffer_size = 4096; buffer_size < max_size; buffer_size *= 2) {
-        // benchmark_stream_copy_buffer(frame_chain, "int", 1, 0, buffer_size);
-        benchmark_stream_copy_buffer_1block(frame_chain, "int", buffer_size);
+    // for (size_t buffer_size = max_size; buffer_size <= max_size; buffer_size *= 2) {
+        benchmark_stream_copy_buffer_nblock(frame_chain, "float4", buffer_size, 256);
     }
 }
 
@@ -300,6 +304,8 @@ int main() {
     ppl::common::ocl::FrameChain* frame_chain = ppl::common::ocl::getSharedFrameChain();
     frame_chain->setTuningQueueStatus(true);
     frame_chain->setProjectName("cl_bandwidth");
+
+    ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
 
     // BandtwidhTest_demo(frame_chain);
     // BandtwidhTest_writem_readn(frame_chain);
