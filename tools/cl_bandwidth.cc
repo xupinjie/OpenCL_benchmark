@@ -9,6 +9,7 @@
 
 #include "kernels/demo.cl.h"
 #include "kernels/benchmark_bandwidth_buffer.cl.h"
+#include "kernels/benchmark_bandwidth_sharememory.cl.h"
 
 #include <string>
 
@@ -37,6 +38,26 @@
             min_time_us = MIN(min_time_us, time_ns / 1000);  \
         }                                                    \
         ave_time_us /= loops;                                \
+    }
+
+#define LOOP_KERNEL_SYN_NS(cmd)                                 \
+    {                                                        \
+        for (int i = 0; i < warms; i++) {                    \
+            cmd;                                             \
+            ret = clFinish(frame_chain->getQueue());         \
+        }                                                    \
+        for (int i = 0; i < loops; i++) {                    \
+            cmd ret = clFinish(frame_chain->getQueue());     \
+            CHECK_ERROR("clFinish failed", ret);             \
+            uint64_t time_ns = frame_chain->getKernelTime(); \
+            if (time_ns == UINT64_MAX) {                     \
+                LOG(ERROR) << "run kernel failed";           \
+                exit(-1);                                    \
+            }                                                \
+            ave_time_ns += time_ns;                   \
+            min_time_ns = MIN(min_time_ns, time_ns);  \
+        }                                                    \
+        ave_time_ns /= loops;                                \
     }
 
 #define LOOP_KERNEL_NON_SYN(cmd)                             \
@@ -239,6 +260,53 @@ static void benchmark_stream_copy_buffer_nblock(ppl::common::ocl::FrameChain* fr
            blocknum, dtype_options.c_str(), max_bandwidth, ave_bandwidth);
 }
 
+static void benchmark_stream_sharedmemory_nblock(ppl::common::ocl::FrameChain* frame_chain, std::string dtype_options,
+                                                size_t lds_bytes_per_block, size_t blocknum) {
+    cl_int ret = 0;
+    ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
+    size_t max_mem_alloc_size = device->getMaxMemAllocSize();
+    size_t elems_per_block = lds_bytes_per_block / get_elem_size(dtype_options);
+    size_t elems = elems_per_block * blocknum;
+
+    size_t OUT_LOOPS = 1;
+    size_t read_bytes, write_bytes;
+    read_bytes = lds_bytes_per_block * blocknum;
+    write_bytes = 0;
+
+    cl_mem write_buffer = clCreateBuffer(frame_chain->getContext(), CL_MEM_WRITE_ONLY, max_mem_alloc_size, NULL, &ret);
+    CHECK_ERROR("clCreateBuffer failed", ret);
+    ppl::common::Destructor __guard([&write_buffer]() -> void {
+        if (write_buffer)
+            clReleaseMemObject(write_buffer);
+    });
+
+    std::string options = "-cl-std=CL2.0 -cl-mad-enable -cl-fast-relaxed-math";
+    options += (" -DT=" + dtype_options);
+    options += (" -DBLOCKSIZE=" + std::to_string(elems_per_block));
+    options += (" -DOUT_LOOPS=" + std::to_string(OUT_LOOPS));
+    cl_kernel kernel;
+
+    frame_chain->setCompileOptions(options.c_str());
+    SET_PROGRAM_SOURCE(frame_chain, benchmark_bandwidth_sharememory);
+
+    size_t ls[] = {elems_per_block, 1, 1};
+    size_t gs[] = {elems_per_block * blocknum, 1, 1};
+
+    uint64_t ave_time_ns = 0;
+    uint64_t min_time_ns = UINT64_MAX;
+    const int loops = 10;
+    const int warms = 5;
+
+    LOOP_KERNEL_SYN_NS(
+        runOclKernel(frame_chain, "bandwidth_read_sharememory_nblock", 1, gs, ls, elems_per_block, write_buffer););
+
+    double ave_bandwidth = OUT_LOOPS * (read_bytes + write_bytes) * 1.0 / (ave_time_ns * 1e-09) / 1024 / 1024 / 1024;
+    double max_bandwidth = OUT_LOOPS * (read_bytes + write_bytes) * 1.0 / (min_time_ns * 1e-09) / 1024 / 1024 / 1024;
+    size_t bytesKB = (read_bytes + write_bytes) / 1024;
+    printf("shared memory bandwidth: %zuKB lds_bytes_per_block:%d blocknum:%d %s. max:%f GB/s, ave: %f times:%d\n", bytesKB,
+           lds_bytes_per_block, blocknum, dtype_options.c_str(), max_bandwidth, ave_bandwidth, ave_time_ns);
+}
+
 /**
  * @brief 测试读和写的次数，对带宽的影响
  */
@@ -299,6 +367,23 @@ static void BandtwidhTest_cachesize(ppl::common::ocl::FrameChain* frame_chain) {
     }
 }
 
+/**
+ * @brief 测试shared memory带宽/延迟
+ */
+static void BandtwidhTest_sharedmemory(ppl::common::ocl::FrameChain* frame_chain) {
+    size_t stride = 4096;
+    // size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
+    size_t max_size = 128 * 1024;
+    size_t lds_bytes_per_block = 4*1024;
+    size_t block_num = 1;
+    // for (; lds_bytes_per_block < max_size; lds_bytes_per_block *= 2) {
+    //     benchmark_stream_sharedmemory_nblock(frame_chain, "float4", lds_bytes_per_block, block_num);
+    // }
+    for (; block_num < 1024; block_num++) {
+        benchmark_stream_sharedmemory_nblock(frame_chain, "float8", lds_bytes_per_block, block_num);
+    }
+}
+
 int main() {
     ppl::common::ocl::createSharedFrameChain(false);
     ppl::common::ocl::FrameChain* frame_chain = ppl::common::ocl::getSharedFrameChain();
@@ -311,7 +396,9 @@ int main() {
     // BandtwidhTest_writem_readn(frame_chain);
     // BandtwidhTest_datatype(frame_chain);
     // BandtwidhTest_datasize(frame_chain);
-    BandtwidhTest_cachesize(frame_chain);
+    // BandtwidhTest_cachesize(frame_chain);
+    // benchmark_stream_copy_buffer_nblock(frame_chain, "float4", 4 * 1024 * 1024, 256);
+    BandtwidhTest_sharedmemory(frame_chain);
 
     ppl::common::ocl::removeAllKernelsFromPool();
 
