@@ -50,3 +50,6 @@ target_link_libraries(fp16_diff pplcommon_static)
 
 add_executable(cl_bandwidth ${CMAKE_CURRENT_SOURCE_DIR}/tools/cl_bandwidth.cc)
 target_link_libraries(cl_bandwidth pplcommon_static)
+
+add_executable(cl_peak ${CMAKE_CURRENT_SOURCE_DIR}/tools/cl_peak.cc)
+target_link_libraries(cl_peak pplcommon_static)
