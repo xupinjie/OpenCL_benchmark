@@ -357,7 +357,7 @@ void benchmark_peak_v3(ppl::common::ocl::FrameChain* frame_chain)
 
             printf("int peak gfops:%f %fns\n", gflops, ave_time_ns);
 
-            if (frame_chain->getVendorDesc() == "QUALCOMM")
+            // if (frame_chain->getVendorDesc() == "QUALCOMM")
             {
                 LOOP_KERNEL_SYN(runOclKernel(frame_chain, "compute_dot_2_32", 3, gs, local_size, 
                 read_buffer, read_buffer_s,read_buffer2,read_buffer2_s,write_buffer);)

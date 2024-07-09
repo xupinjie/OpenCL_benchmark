@@ -3,9 +3,6 @@
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size: enable
 #endif
 
-#ifdef VENDOR_QUALCOMM
-__attribute__((qcom_reqd_sub_group_size("half"))) __kernel
-#endif
 __kernel void compute_float_2_32(
         __read_only image2d_t A,
         __read_only image2d_t scaleA,
@@ -29,9 +26,9 @@ __kernel void compute_float_2_32(
 
 }
 
-#ifdef VENDOR_QUALCOMM
-__attribute__((qcom_reqd_sub_group_size("half"))) __kernel
-#endif
+// #ifdef VENDOR_QUALCOMM
+// __attribute__((qcom_reqd_sub_group_size("full"))) __kernel
+// #endif
 __kernel void compute_half_2_32(
         __read_only image2d_t A,
         __read_only image2d_t scaleA,
@@ -56,9 +53,6 @@ __kernel void compute_half_2_32(
 }
 
 
-#ifdef VENDOR_QUALCOMM
-__attribute__((qcom_reqd_sub_group_size("half"))) __kernel
-#endif
 __kernel void compute_int_2_32(
         __read_only image2d_t A,
         __read_only image2d_t scaleA,
@@ -89,8 +83,12 @@ __kernel void compute_int_2_32(
 
 #ifdef VENDOR_QUALCOMM
 #pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
+#endif
 
-__attribute__((qcom_reqd_sub_group_size("half"))) __kernel
+#ifdef VENDOR_ARM
+#pragma OPENCL EXTENSION cl_arm_integer_dot_product_int8 : enable
+#endif
+
 __kernel void compute_dot_2_32(
         __read_only image2d_t A,
         __read_only image2d_t scaleA,
@@ -115,7 +113,9 @@ __kernel void compute_dot_2_32(
 
         for (int j = 0; j < 8; j+=1) 
         {
+#ifdef VENDOR_QUALCOMM
             acc = qcom_dot8_acc(x.s0, y.s0,acc);
+
 
             //accf += convert_half(acc)*0.2f;
 
@@ -131,6 +131,14 @@ __kernel void compute_dot_2_32(
               // x2 = (y2*x2) + y2;   y2 = (x2*y2) + x2;      x2 = (y2*x2) + y2;
                  
            //x = mad(y, x, y);   y = mad(x, y, x);   x = mad(y, x, y);   y = mad(x, y, x);x = mad(y, x, y);
+#endif
+
+#ifdef VENDOR_ARM
+            acc = arm_dot_acc(x.s0, y.s0,acc);
+            acc = arm_dot_acc(x.s1, y.s0,acc);
+            acc = arm_dot_acc(x.s2, y.s0,acc);
+            acc = arm_dot_acc(x.s3, y.s0,acc);
+#endif
         }
     }
 
@@ -140,4 +148,3 @@ __kernel void compute_dot_2_32(
     
 
 }
-#endif
