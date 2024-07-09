@@ -1,7 +1,11 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
+#ifdef VENDOR_QUALCOMM
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size: enable
+#endif
 
+#ifdef VENDOR_QUALCOMM
 __attribute__((qcom_reqd_sub_group_size("half"))) __kernel
+#endif
 __kernel void compute_float_2_32(
         __read_only image2d_t A,
         __read_only image2d_t scaleA,
@@ -25,8 +29,9 @@ __kernel void compute_float_2_32(
 
 }
 
-
+#ifdef VENDOR_QUALCOMM
 __attribute__((qcom_reqd_sub_group_size("half"))) __kernel
+#endif
 __kernel void compute_half_2_32(
         __read_only image2d_t A,
         __read_only image2d_t scaleA,
@@ -51,8 +56,9 @@ __kernel void compute_half_2_32(
 }
 
 
-
+#ifdef VENDOR_QUALCOMM
 __attribute__((qcom_reqd_sub_group_size("half"))) __kernel
+#endif
 __kernel void compute_int_2_32(
         __read_only image2d_t A,
         __read_only image2d_t scaleA,
@@ -81,7 +87,7 @@ __kernel void compute_int_2_32(
 
 
 
-
+#ifdef VENDOR_QUALCOMM
 #pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
 
 __attribute__((qcom_reqd_sub_group_size("half"))) __kernel
@@ -134,3 +140,4 @@ __kernel void compute_dot_2_32(
     
 
 }
+#endif
