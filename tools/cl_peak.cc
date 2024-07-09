@@ -9,6 +9,7 @@
 
 #include "kernels/benchmark_peak.cl.h"
 #include "kernels/benchmark_peak_v2.cl.h"
+#include "kernels/benchmark_peak_v3.cl.h"
 
 #include <string>
 #include <limits>
@@ -205,6 +206,187 @@ static void benchmark_peak_v2(ppl::common::ocl::FrameChain* frame_chain) {
     printf("half peak gfops:%f %fns\n", gflops, ave_time_ns);
 }
 
+#if 1
+void benchmark_peak_v3(ppl::common::ocl::FrameChain* frame_chain)
+{
+    cl_int ret = 0;
+
+    cl_mem read_buffer ;
+    cl_mem read_buffer_s ;
+    cl_mem read_buffer2  ;
+    cl_mem read_buffer2_s  ;
+    cl_mem write_buffer ;
+
+    //prepare for gemm 
+    const int M= 1024;
+    const int N= 1024;
+    const int K= 1024;   
+    const int QUANT_GROUP = 8;  
+    const int NREP= 8;
+    const int MREP= 4;
+
+    //A
+    {
+        cl_image_format img_format;
+        img_format.image_channel_order = CL_RGBA;
+        img_format.image_channel_data_type = CL_UNSIGNED_INT32;
+        cl_image_desc img_desc;
+        img_desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+        img_desc.image_width = K/QUANT_GROUP;
+        img_desc.image_height = M;
+        img_desc.image_depth = 1;
+        img_desc.image_array_size = 1;
+        img_desc.image_row_pitch = 0;
+        img_desc.image_slice_pitch = 0;
+        img_desc.num_mip_levels = 0;
+        img_desc.num_samples = 0;
+        img_desc.buffer = NULL;
+        read_buffer = clCreateImage(frame_chain->getContext(), CL_MEM_READ_ONLY, &img_format, &img_desc, NULL, &ret);
+        //read_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(short) * M*K*2, NULL, &ret);
+        
+    }
+
+    {
+
+        cl_image_format img_format;
+        img_format.image_channel_order = CL_R;
+        img_format.image_channel_data_type = CL_HALF_FLOAT;
+        cl_image_desc img_desc;
+        img_desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+        img_desc.image_width = K/QUANT_GROUP;
+        img_desc.image_height = M;
+        img_desc.image_depth = 1;
+        img_desc.image_array_size = 1;
+        img_desc.image_row_pitch = 0;
+        img_desc.image_slice_pitch = 0;
+        img_desc.num_mip_levels = 0;
+        img_desc.num_samples = 0;
+        img_desc.buffer = NULL;
+        //fprintf(stderr, "scale Image size: %zu %zu %zu\n", img_desc.image_width, img_desc.image_height, img_desc.image_depth);
+        read_buffer_s = clCreateImage(frame_chain->getContext(), CL_MEM_READ_ONLY, &img_format, &img_desc, NULL, &ret);
+
+    }
+
+    //B
+      {
+        cl_image_format img_format;
+        img_format.image_channel_order = CL_RGBA;
+        img_format.image_channel_data_type = CL_SIGNED_INT32;
+
+        cl_image_desc img_desc;
+        img_desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+        img_desc.image_width = N/QUANT_GROUP ;
+        img_desc.image_height = K;
+        img_desc.image_depth = 1;
+        img_desc.image_array_size = 1;
+        img_desc.image_row_pitch = 0;
+        img_desc.image_slice_pitch = 0;
+        img_desc.num_mip_levels = 0;
+        img_desc.num_samples = 0;
+        img_desc.buffer = NULL;
+        read_buffer2 = clCreateImage(frame_chain->getContext(), CL_MEM_READ_ONLY, &img_format, &img_desc, NULL, &ret);
+        
+    }
+
+
+    {
+
+        cl_image_format img_format;
+        img_format.image_channel_order = CL_R;
+        img_format.image_channel_data_type = CL_HALF_FLOAT;
+
+        cl_image_desc img_desc;
+        img_desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+        img_desc.image_width = N/QUANT_GROUP;
+        img_desc.image_height = K;
+        img_desc.image_depth = 1;
+        img_desc.image_array_size = 1;
+        img_desc.image_row_pitch = 0;
+        img_desc.image_slice_pitch = 0;
+        img_desc.num_mip_levels = 0;
+        img_desc.num_samples = 0;
+        img_desc.buffer = NULL;
+
+        //fprintf(stderr, "scale Image size: %zu %zu %zu\n", img_desc.image_width, img_desc.image_height, img_desc.image_depth);
+        read_buffer2_s = clCreateImage(frame_chain->getContext(), CL_MEM_READ_ONLY, &img_format, &img_desc, NULL, &ret);
+
+    }
+
+    //C:half
+    write_buffer = clCreateBuffer(frame_chain->getContext(), CL_MEM_WRITE_ONLY, sizeof(short) * M*N*2, NULL, &ret);
+
+    { 
+
+        std::string options = "-cl-std=CL2.0 -cl-mad-enable -cl-fast-relaxed-math";
+        frame_chain->setCompileOptions(options.c_str());
+        SET_PROGRAM_SOURCE(frame_chain, benchmark_peak_v3);
+
+        size_t local_size[] = {(size_t)1024, 1, 1};
+        size_t global_size[] = {(size_t)N/NREP,(size_t)M/MREP, (size_t)1 }; //1024*1024 w ,  1024 h
+  
+        for (int k=0;k<1;k++)
+        {
+
+            const size_t globalWIs = 1024*1024;
+            size_t workPerWI = 2*32*10*10*4;
+            size_t gs[] = {1024, 1024, 1};
+
+            double ave_time_ns = 0;
+            double min_time_ns = __DBL_MAX__;
+            const int loops = 100;
+            const int warms = 5;
+          
+            LOOP_KERNEL_SYN(runOclKernel(frame_chain, "compute_float_2_32", 3, gs, local_size, 
+            read_buffer, read_buffer_s,read_buffer2,read_buffer2_s,write_buffer);)
+
+            double gflops = ((double)(globalWIs) * (double)(workPerWI)) / ave_time_ns;
+
+            printf("float peak gfops:%f %fns\n", gflops, ave_time_ns);
+
+            LOOP_KERNEL_SYN(runOclKernel(frame_chain, "compute_half_2_32", 3, gs, local_size, 
+            read_buffer, read_buffer_s,read_buffer2,read_buffer2_s,write_buffer);)
+
+            gflops = ((double)(globalWIs) * (double)(workPerWI)) / ave_time_ns;
+
+            printf("half peak gfops:%f %fns\n", gflops, ave_time_ns);
+
+            LOOP_KERNEL_SYN(runOclKernel(frame_chain, "compute_int_2_32", 3, gs, local_size, 
+            read_buffer, read_buffer_s,read_buffer2,read_buffer2_s,write_buffer);)
+
+            gflops = ((double)(globalWIs) * (double)(workPerWI)) / ave_time_ns;
+
+            printf("int peak gfops:%f %fns\n", gflops, ave_time_ns);
+
+            LOOP_KERNEL_SYN(runOclKernel(frame_chain, "compute_dot_2_32", 3, gs, local_size, 
+            read_buffer, read_buffer_s,read_buffer2,read_buffer2_s,write_buffer);)
+
+            workPerWI = 20*8*16*2;
+
+            gflops = ((double)(globalWIs) * (double)(workPerWI)) / ave_time_ns;
+
+            printf("dot peak gfops:%f %fns\n", gflops, ave_time_ns);
+
+
+
+        }
+
+        
+        clFinish(frame_chain->getQueue());
+        //ret = clReleaseKernel(kernel);
+        
+    }
+
+
+
+    ret = clReleaseMemObject(read_buffer);
+    ret = clReleaseMemObject(read_buffer2);
+    ret = clReleaseMemObject(read_buffer_s);
+    ret = clReleaseMemObject(read_buffer2_s);
+    ret = clReleaseMemObject(write_buffer);
+
+}
+#endif 
+
 int main() {
     ppl::common::ocl::createSharedFrameChain(false);
     ppl::common::ocl::FrameChain* frame_chain = ppl::common::ocl::getSharedFrameChain();
@@ -214,7 +396,8 @@ int main() {
     ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
 
     // benchmark_peak(frame_chain, "half");
-    benchmark_peak_v2(frame_chain);
+    benchmark_peak_v3(frame_chain);
+    
 
     ppl::common::ocl::removeAllKernelsFromPool();
 

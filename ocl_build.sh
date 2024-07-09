@@ -1,4 +1,4 @@
-export ANDROID_NDK=/your/path/android-ndk-rxx
+export ANDROID_NDK=/home/xulei1/tppl/android-ndk-r24
 
 echo "aarch64"
 aar="arm64-v8a"
