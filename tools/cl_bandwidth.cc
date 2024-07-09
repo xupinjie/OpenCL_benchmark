@@ -13,6 +13,10 @@
 
 #include <string>
 
+//不是所有厂商都会返回正确的最大malloc size，比如mali
+#define MAX_BUFFER_FIX 1 * 1024 * 1024 * 1024
+#define MIN(a, b) (a) < (b) ? (a) : (b);
+
 #define CHECK_ERROR(info, ret)             \
     if (ret != 0) {                        \
         LOG(ERROR) << info << ": " << ret; \
@@ -40,7 +44,7 @@
         ave_time_us /= loops;                                \
     }
 
-#define LOOP_KERNEL_SYN_NS(cmd)                                 \
+#define LOOP_KERNEL_SYN_NS(cmd)                              \
     {                                                        \
         for (int i = 0; i < warms; i++) {                    \
             cmd;                                             \
@@ -54,8 +58,8 @@
                 LOG(ERROR) << "run kernel failed";           \
                 exit(-1);                                    \
             }                                                \
-            ave_time_ns += time_ns;                   \
-            min_time_ns = MIN(min_time_ns, time_ns);  \
+            ave_time_ns += time_ns;                          \
+            min_time_ns = MIN(min_time_ns, time_ns);         \
         }                                                    \
         ave_time_ns /= loops;                                \
     }
@@ -141,7 +145,7 @@ static void benchmark_stream_copy_buffer(ppl::common::ocl::FrameChain* frame_cha
 
     cl_int ret = 0;
     ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
-    size_t max_mem_alloc_size = device->getMaxMemAllocSize();
+    size_t max_mem_alloc_size = MIN(device->getMaxMemAllocSize(), MAX_BUFFER_FIX);
 
     if (buffer_bytes == 0)
         buffer_bytes = max_mem_alloc_size;
@@ -205,7 +209,7 @@ static void benchmark_stream_copy_buffer_nblock(ppl::common::ocl::FrameChain* fr
                                                 size_t buffer_bytes = 0, size_t blocknum = 1) {
     cl_int ret = 0;
     ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
-    size_t max_mem_alloc_size = device->getMaxMemAllocSize();
+    size_t max_mem_alloc_size = MIN(device->getMaxMemAllocSize(), MAX_BUFFER_FIX);
 
     int outloops = 64;
 
@@ -261,7 +265,7 @@ static void benchmark_stream_copy_buffer_nblock(ppl::common::ocl::FrameChain* fr
 }
 
 static void benchmark_stream_sharedmemory_nblock(ppl::common::ocl::FrameChain* frame_chain, std::string dtype_options,
-                                                size_t lds_bytes_per_block, size_t blocknum) {
+                                                 size_t lds_bytes_per_block, size_t blocknum) {
     cl_int ret = 0;
     ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
     size_t max_mem_alloc_size = device->getMaxMemAllocSize();
@@ -303,14 +307,15 @@ static void benchmark_stream_sharedmemory_nblock(ppl::common::ocl::FrameChain* f
     double ave_bandwidth = OUT_LOOPS * (read_bytes + write_bytes) * 1.0 / (ave_time_ns * 1e-09) / 1024 / 1024 / 1024;
     double max_bandwidth = OUT_LOOPS * (read_bytes + write_bytes) * 1.0 / (min_time_ns * 1e-09) / 1024 / 1024 / 1024;
     size_t bytesKB = (read_bytes + write_bytes) / 1024;
-    printf("shared memory bandwidth: %zuKB lds_bytes_per_block:%d blocknum:%d %s. max:%f GB/s, ave: %f times:%d\n", bytesKB,
-           lds_bytes_per_block, blocknum, dtype_options.c_str(), max_bandwidth, ave_bandwidth, ave_time_ns);
+    printf("shared memory bandwidth: %zuKB lds_bytes_per_block:%d blocknum:%d %s. max:%f GB/s, ave: %f times:%d\n",
+           bytesKB, lds_bytes_per_block, blocknum, dtype_options.c_str(), max_bandwidth, ave_bandwidth, ave_time_ns);
 }
 
 /**
  * @brief 测试读和写的次数，对带宽的影响
  */
 static void BandtwidhTest_writem_readn(ppl::common::ocl::FrameChain* frame_chain) {
+    LOG(INFO) << "测试读和写的次数，对带宽的影响";
     benchmark_stream_copy_buffer(frame_chain, "float8", 1, 1, 0);
     benchmark_stream_copy_buffer(frame_chain, "float8", 2, 1, 0);
     benchmark_stream_copy_buffer(frame_chain, "float8", 4, 1, 0);
@@ -326,6 +331,7 @@ static void BandtwidhTest_writem_readn(ppl::common::ocl::FrameChain* frame_chain
  * @brief 数据类型对带宽的影响
  */
 static void BandtwidhTest_datatype(ppl::common::ocl::FrameChain* frame_chain) {
+    LOG(INFO) << "数据类型对带宽的影响";
     benchmark_stream_copy_buffer(frame_chain, "float", 1, 0, 0);
     benchmark_stream_copy_buffer(frame_chain, "float2", 1, 0, 0);
     benchmark_stream_copy_buffer(frame_chain, "float4", 1, 0, 0);
@@ -346,7 +352,9 @@ static void BandtwidhTest_datatype(ppl::common::ocl::FrameChain* frame_chain) {
  * @brief 访存量对带宽的影响
  */
 static void BandtwidhTest_datasize(ppl::common::ocl::FrameChain* frame_chain) {
+    LOG(INFO) << "访存量对带宽的影响";
     size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
+    max_size = MIN(max_size, MAX_BUFFER_FIX);
     // for (size_t buffer_size = 1024; buffer_size <= max_size; buffer_size*=2) {
     for (size_t buffer_size = max_size; buffer_size >= 1024; buffer_size /= 2) {
         benchmark_stream_copy_buffer(frame_chain, "half8", 1, 0, buffer_size);
@@ -357,12 +365,13 @@ static void BandtwidhTest_datasize(ppl::common::ocl::FrameChain* frame_chain) {
  * @brief 测试多层存储的大小和带宽
  */
 static void BandtwidhTest_cachesize(ppl::common::ocl::FrameChain* frame_chain) {
+    LOG(INFO) << "测试多层存储的大小和带宽";
     size_t stride = 4096;
     // size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
     size_t max_size = 32 * 1024 * 1024;
     // for (size_t buffer_size = 4096; buffer_size < max_size; buffer_size += stride) {
     for (size_t buffer_size = 4096; buffer_size < max_size; buffer_size *= 2) {
-    // for (size_t buffer_size = max_size; buffer_size <= max_size; buffer_size *= 2) {
+        // for (size_t buffer_size = max_size; buffer_size <= max_size; buffer_size *= 2) {
         benchmark_stream_copy_buffer_nblock(frame_chain, "float4", buffer_size, 256);
     }
 }
@@ -371,10 +380,11 @@ static void BandtwidhTest_cachesize(ppl::common::ocl::FrameChain* frame_chain) {
  * @brief 测试shared memory带宽/延迟
  */
 static void BandtwidhTest_sharedmemory(ppl::common::ocl::FrameChain* frame_chain) {
+    LOG(INFO) << "测试shared memory带宽/延迟";
     size_t stride = 4096;
     // size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
     size_t max_size = 128 * 1024;
-    size_t lds_bytes_per_block = 4*1024;
+    size_t lds_bytes_per_block = 4 * 1024;
     size_t block_num = 1;
     // for (; lds_bytes_per_block < max_size; lds_bytes_per_block *= 2) {
     //     benchmark_stream_sharedmemory_nblock(frame_chain, "float4", lds_bytes_per_block, block_num);
@@ -393,12 +403,12 @@ int main() {
     ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
 
     // BandtwidhTest_demo(frame_chain);
-    // BandtwidhTest_writem_readn(frame_chain);
-    // BandtwidhTest_datatype(frame_chain);
-    // BandtwidhTest_datasize(frame_chain);
-    // BandtwidhTest_cachesize(frame_chain);
+    BandtwidhTest_writem_readn(frame_chain);
+    BandtwidhTest_datatype(frame_chain);
+    BandtwidhTest_datasize(frame_chain);
+    BandtwidhTest_cachesize(frame_chain);
     // benchmark_stream_copy_buffer_nblock(frame_chain, "float4", 4 * 1024 * 1024, 256);
-    BandtwidhTest_sharedmemory(frame_chain);
+    // BandtwidhTest_sharedmemory(frame_chain);
 
     ppl::common::ocl::removeAllKernelsFromPool();
 
