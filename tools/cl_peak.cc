@@ -217,10 +217,13 @@ void benchmark_peak_v3(ppl::common::ocl::FrameChain* frame_chain)
     cl_mem read_buffer2_s  ;
     cl_mem write_buffer ;
 
+    ppl::common::ocl::Device* device = ppl::common::ocl::getSharedDevice();
+    size_t max_items_in_group = device->getMaxWorkItemsInGroup();
+
     //prepare for gemm 
-    const int M= 1024;
-    const int N= 1024;
-    const int K= 1024;   
+    const int M= max_items_in_group;
+    const int N= max_items_in_group;
+    const int K= max_items_in_group;   
     const int QUANT_GROUP = 8;  
     const int NREP= 8;
     const int MREP= 4;
@@ -321,15 +324,15 @@ void benchmark_peak_v3(ppl::common::ocl::FrameChain* frame_chain)
         frame_chain->setCompileOptions(options.c_str());
         SET_PROGRAM_SOURCE(frame_chain, benchmark_peak_v3);
 
-        size_t local_size[] = {(size_t)1024, 1, 1};
-        size_t global_size[] = {(size_t)N/NREP,(size_t)M/MREP, (size_t)1 }; //1024*1024 w ,  1024 h
+        size_t local_size[] = {(size_t)max_items_in_group, 1, 1};
+        size_t global_size[] = {(size_t)N/NREP,(size_t)M/MREP, (size_t)1 }; //max_items_in_group*max_items_in_group w ,  max_items_in_group h
   
         for (int k=0;k<1;k++)
         {
 
-            const size_t globalWIs = 1024*1024;
+            const size_t globalWIs = max_items_in_group*max_items_in_group;
             size_t workPerWI = 2*32*10*10*4;
-            size_t gs[] = {1024, 1024, 1};
+            size_t gs[] = {max_items_in_group, max_items_in_group, 1};
 
             double ave_time_ns = 0;
             double min_time_ns = __DBL_MAX__;
