@@ -22,7 +22,6 @@
         LOG(ERROR) << info << ": " << ret; \
         exit(-1);                          \
     }
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define LOOP_KERNEL_SYN(cmd)                                 \
     {                                                        \
@@ -260,7 +259,7 @@ static void benchmark_stream_copy_buffer_nblock(ppl::common::ocl::FrameChain* fr
         blocknum * outloops * (read_bytes + write_bytes) * 1.0 / (min_time_us * 1e-06) / 1024 / 1024 / 1024;
     size_t bytesMB = (read_bytes + write_bytes) / 1024 / 1024;
     size_t bytesKB = (read_bytes + write_bytes) / 1024;
-    printf("stream copy buffer bandwidth: %zuKB loops:%d blocknum:%d %s. max:%f GB/s, ave: %f\n", bytesKB, outloops,
+    printf("stream copy buffer bandwidth: %zuKB loops:%d blocknum:%zu %s. max:%f GB/s, ave: %f\n", bytesKB, outloops,
            blocknum, dtype_options.c_str(), max_bandwidth, ave_bandwidth);
 }
 
@@ -307,7 +306,7 @@ static void benchmark_stream_sharedmemory_nblock(ppl::common::ocl::FrameChain* f
     double ave_bandwidth = OUT_LOOPS * (read_bytes + write_bytes) * 1.0 / (ave_time_ns * 1e-09) / 1024 / 1024 / 1024;
     double max_bandwidth = OUT_LOOPS * (read_bytes + write_bytes) * 1.0 / (min_time_ns * 1e-09) / 1024 / 1024 / 1024;
     size_t bytesKB = (read_bytes + write_bytes) / 1024;
-    printf("shared memory bandwidth: %zuKB lds_bytes_per_block:%d blocknum:%d %s. max:%f GB/s, ave: %f times:%d\n",
+    printf("shared memory bandwidth: %zuKB lds_bytes_per_block:%zu blocknum:%zu %s. max:%f GB/s, ave: %f times:%zu\n",
            bytesKB, lds_bytes_per_block, blocknum, dtype_options.c_str(), max_bandwidth, ave_bandwidth, ave_time_ns);
 }
 

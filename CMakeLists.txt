@@ -51,8 +51,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/oclbenchmark-build/)
 
 add_subdirectory(deps/ppl.common)
 
-add_executable(fp16_diff ${CMAKE_CURRENT_SOURCE_DIR}/tools/fp16_diff.cc)
-target_link_libraries(fp16_diff pplcommon_static)
+# add_executable(fp16_diff ${CMAKE_CURRENT_SOURCE_DIR}/tools/fp16_diff.cc)
+# target_link_libraries(fp16_diff pplcommon_static)
 
 add_executable(cl_bandwidth ${CMAKE_CURRENT_SOURCE_DIR}/tools/cl_bandwidth.cc)
 target_link_libraries(cl_bandwidth pplcommon_static)
@@ -60,5 +60,5 @@ target_link_libraries(cl_bandwidth pplcommon_static)
 add_executable(cl_peak ${CMAKE_CURRENT_SOURCE_DIR}/tools/cl_peak.cc)
 target_link_libraries(cl_peak pplcommon_static)
 
-add_executable(cl_gemm_fp16 ${CMAKE_CURRENT_SOURCE_DIR}/tools/cl_gemm_fp16.cc)
-target_link_libraries(cl_gemm_fp16 pplcommon_static)
+# add_executable(cl_gemm_fp16 ${CMAKE_CURRENT_SOURCE_DIR}/tools/cl_gemm_fp16.cc)
+# target_link_libraries(cl_gemm_fp16 pplcommon_static)

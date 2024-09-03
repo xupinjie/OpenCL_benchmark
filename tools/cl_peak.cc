@@ -171,7 +171,7 @@ static void benchmark_peak(ppl::common::ocl::FrameChain* frame_chain, std::strin
 
     size_t ops = elems * get_elem_num(dtype_options) * 2;
     double gfops = ops / (ave_time_ns);
-    printf("peak %s gfops:%f %f ns %dops\n", dtype_options.c_str(), gfops, ave_time_ns, ops);
+    printf("peak %s gfops:%f %f ns %zuops\n", dtype_options.c_str(), gfops, ave_time_ns, ops);
 }
 
 static void benchmark_peak_v2(ppl::common::ocl::FrameChain* frame_chain) {
