@@ -15,6 +15,12 @@ set(PPLCOMMON_USE_ARMV7 ${PPLNN_USE_ARMV7})
 set(PPLCOMMON_USE_CUDA OFF)
 set(PPLCOMMON_USE_OPENCL ${PPLNN_USE_OCL})
 
+set(g_crypto_key "pplkernelopencl9")
+set(g_crypto_iv "inferenceengine9")
+
+add_definitions(-DG_CRYPTO_KEY="${g_crypto_key}")
+add_definitions(-DG_CRYPTO_IV="${g_crypto_iv}")
+
 ### OpenCL file转换成HEX文件
 # 查找所有内核文件
 file(GLOB_RECURSE KERNEL_FILES clcode/*.cl)
@@ -53,3 +59,6 @@ target_link_libraries(cl_bandwidth pplcommon_static)
 
 add_executable(cl_peak ${CMAKE_CURRENT_SOURCE_DIR}/tools/cl_peak.cc)
 target_link_libraries(cl_peak pplcommon_static)
+
+add_executable(cl_gemm_fp16 ${CMAKE_CURRENT_SOURCE_DIR}/tools/cl_gemm_fp16.cc)
+target_link_libraries(cl_gemm_fp16 pplcommon_static)
