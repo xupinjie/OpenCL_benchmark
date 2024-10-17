@@ -4,7 +4,6 @@
 #include "ppl/common/ocl/framechain.h"
 #include "ppl/common/ocl/runkernel.h"
 #include "ppl/common/ocl/kernelpool.h"
-
 #include "CL/opencl.h"
 
 #include "kernels/benchmark_peak.cl.h"
@@ -13,7 +12,7 @@
 
 #include <string>
 #include <limits>
-
+#define __DBL_MAX__ 1.7976931348623157e+308
 #define CHECK_ERROR(info, ret)             \
     if (ret != 0) {                        \
         LOG(ERROR) << info << ": " << ret; \
@@ -394,7 +393,7 @@ void benchmark_peak_v3(ppl::common::ocl::FrameChain* frame_chain)
 #endif 
 
 int main() {
-    ppl::common::ocl::createSharedFrameChain(false);
+    ppl::common::ocl::createSharedFrameChain(false, 0, 0);
     ppl::common::ocl::FrameChain* frame_chain = ppl::common::ocl::getSharedFrameChain();
     frame_chain->setTuningQueueStatus(true);
     frame_chain->setProjectName("cl_peak");

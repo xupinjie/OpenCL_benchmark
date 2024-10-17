@@ -314,7 +314,7 @@ static void benchmark_stream_sharedmemory_nblock(ppl::common::ocl::FrameChain* f
  * @brief 测试读和写的次数，对带宽的影响
  */
 static void BandtwidhTest_writem_readn(ppl::common::ocl::FrameChain* frame_chain) {
-    LOG(INFO) << "测试读和写的次数，对带宽的影响";
+    LOG(INFO) << "The impact of the number of reads and writes on bandwidth ";
     benchmark_stream_copy_buffer(frame_chain, "float8", 1, 1, 0);
     benchmark_stream_copy_buffer(frame_chain, "float8", 2, 1, 0);
     benchmark_stream_copy_buffer(frame_chain, "float8", 4, 1, 0);
@@ -330,7 +330,7 @@ static void BandtwidhTest_writem_readn(ppl::common::ocl::FrameChain* frame_chain
  * @brief 数据类型对带宽的影响
  */
 static void BandtwidhTest_datatype(ppl::common::ocl::FrameChain* frame_chain) {
-    LOG(INFO) << "数据类型对带宽的影响";
+    LOG(INFO) << "The impact of Datas Class on bandwidth ";
     benchmark_stream_copy_buffer(frame_chain, "float", 1, 0, 0);
     benchmark_stream_copy_buffer(frame_chain, "float2", 1, 0, 0);
     benchmark_stream_copy_buffer(frame_chain, "float4", 1, 0, 0);
@@ -351,7 +351,7 @@ static void BandtwidhTest_datatype(ppl::common::ocl::FrameChain* frame_chain) {
  * @brief 访存量对带宽的影响
  */
 static void BandtwidhTest_datasize(ppl::common::ocl::FrameChain* frame_chain) {
-    LOG(INFO) << "访存量对带宽的影响";
+    LOG(INFO) << "The impact of acess memory on bandwidth ";
     size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
     max_size = MIN(max_size, MAX_BUFFER_FIX);
     // for (size_t buffer_size = 1024; buffer_size <= max_size; buffer_size*=2) {
@@ -364,7 +364,7 @@ static void BandtwidhTest_datasize(ppl::common::ocl::FrameChain* frame_chain) {
  * @brief 测试多层存储的大小和带宽
  */
 static void BandtwidhTest_cachesize(ppl::common::ocl::FrameChain* frame_chain) {
-    LOG(INFO) << "测试多层存储的大小和带宽";
+    LOG(INFO) << "Test the impact of multi-tier storage on bandwidth ";
     size_t stride = 4096;
     // size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
     size_t max_size = 32 * 1024 * 1024;
@@ -379,7 +379,7 @@ static void BandtwidhTest_cachesize(ppl::common::ocl::FrameChain* frame_chain) {
  * @brief 测试shared memory带宽/延迟
  */
 static void BandtwidhTest_sharedmemory(ppl::common::ocl::FrameChain* frame_chain) {
-    LOG(INFO) << "测试shared memory带宽/延迟";
+    LOG(INFO) << "Test shared memory brandwidth/latency";
     size_t stride = 4096;
     // size_t max_size = ppl::common::ocl::getSharedDevice()->getMaxMemAllocSize();
     size_t max_size = 128 * 1024;
@@ -394,7 +394,7 @@ static void BandtwidhTest_sharedmemory(ppl::common::ocl::FrameChain* frame_chain
 }
 
 int main() {
-    ppl::common::ocl::createSharedFrameChain(false);
+    ppl::common::ocl::createSharedFrameChain(false, 0, 0);
     ppl::common::ocl::FrameChain* frame_chain = ppl::common::ocl::getSharedFrameChain();
     frame_chain->setTuningQueueStatus(true);
     frame_chain->setProjectName("cl_bandwidth");
